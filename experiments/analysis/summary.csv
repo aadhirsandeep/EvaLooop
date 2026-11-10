@@ -1,0 +1,5 @@
+model,configuration,n_tasks,success_rate,asl_score
+gemini-3.5-flash,standard-mbpp-plus,100,0.800,7.746
+gemini-3.5-flash,crosslingual-zh,100,0.800,8.000
+gemini-3.1-flash-lite,standard-mbpp-plus,100,0.770,7.013
+gemini-3.1-flash-lite,crosslingual-zh,100,0.770,7.277

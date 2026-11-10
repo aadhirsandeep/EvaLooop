@@ -1,0 +1,6 @@
+[
+ {"model": "gemini-3.5-flash", "configuration": "standard-mbpp-plus", "results": "results/main/flash35_standard_code_generation_summarization_results.json", "calls": "results/main/flash35_standard_calls.jsonl"},
+ {"model": "gemini-3.5-flash", "configuration": "crosslingual-zh", "results": "results/main/flash35_zh_code_generation_crosslingual_summarization_results.json", "calls": "results/main/flash35_zh_calls.jsonl"},
+ {"model": "gemini-3.1-flash-lite", "configuration": "standard-mbpp-plus", "results": "results/main/flashlite_standard_code_generation_summarization_results.json", "calls": "results/main/flashlite_standard_calls.jsonl"},
+ {"model": "gemini-3.1-flash-lite", "configuration": "crosslingual-zh", "results": "results/main/flashlite_zh_code_generation_crosslingual_summarization_results.json", "calls": "results/main/flashlite_zh_calls.jsonl"}
+]

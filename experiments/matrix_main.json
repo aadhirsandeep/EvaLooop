@@ -1,11 +1,6 @@
-﻿[
- {"experiment_name": "flashlite_standard", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "standard", "prompt_set": "repo", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 6},
- {"experiment_name": "flashlite_zh", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "crosslingual", "summary_language": "zh", "prompt_set": "repo", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 6},
- {"experiment_name": "flashlite_hi", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "crosslingual", "summary_language": "hi", "prompt_set": "repo", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 6},
- {"experiment_name": "flashlite_standard_detailed", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "standard", "prompt_set": "data_package", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 6},
- {"experiment_name": "flashlite_zh_detailed", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "crosslingual", "summary_language": "zh", "prompt_set": "data_package", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 6},
+[
  {"experiment_name": "flash35_standard", "model": "vertex/google/gemini-3.5-flash", "loop": "standard", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 4096, "reasoning_effort": "low", "concurrency": 8},
  {"experiment_name": "flash35_zh", "model": "vertex/google/gemini-3.5-flash", "loop": "crosslingual", "summary_language": "zh", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 4096, "reasoning_effort": "low", "concurrency": 8},
- {"experiment_name": "gptoss_standard", "model": "vertex/openai/gpt-oss-120b-maas", "loop": "standard", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 4096, "reasoning_effort": "low", "concurrency": 2},
- {"experiment_name": "gptoss_zh", "model": "vertex/openai/gpt-oss-120b-maas", "loop": "crosslingual", "summary_language": "zh", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 4096, "reasoning_effort": "low", "concurrency": 2}
+ {"experiment_name": "flashlite_standard", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "standard", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 8},
+ {"experiment_name": "flashlite_zh", "model": "vertex/google/gemini-3.1-flash-lite", "loop": "crosslingual", "summary_language": "zh", "prompt_set": "repo", "task_ids_file": "experiments/task_subset_100.txt", "output_dir": "results/main", "max_new_tokens": 1024, "concurrency": 8}
 ]

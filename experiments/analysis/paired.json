@@ -1,0 +1,64 @@
+[
+  {
+    "model": "gemini-3.5-flash",
+    "baseline": "standard-mbpp-plus",
+    "extension": "crosslingual-zh",
+    "n_tasks": 100,
+    "asl_pow_standard": 7.746,
+    "asl_pow_extension": 8.0,
+    "asl_pow_diff": 0.25399999999999956,
+    "asl_pow_diff_95ci_bootstrap": [
+      0.0,
+      0.58
+    ],
+    "mean_sustained_standard": 7.8,
+    "mean_sustained_extension": 8.0,
+    "tasks_extension_shorter": 0,
+    "tasks_extension_longer": 3,
+    "tasks_equal": 97,
+    "tasks_pass1_both": 80,
+    "survive10_standard_among_pass1_both": 77,
+    "survive10_extension_among_pass1_both": 80,
+    "cycle1_identical_code": 71,
+    "cycle1_pass_agreement": 100,
+    "broken_by_extension": [],
+    "rescued_by_extension": [
+      "Mbpp/286",
+      "Mbpp/787",
+      "Mbpp/796"
+    ]
+  },
+  {
+    "model": "gemini-3.1-flash-lite",
+    "baseline": "standard-mbpp-plus",
+    "extension": "crosslingual-zh",
+    "n_tasks": 100,
+    "asl_pow_standard": 7.013,
+    "asl_pow_extension": 7.277,
+    "asl_pow_diff": 0.26400000000000023,
+    "asl_pow_diff_95ci_bootstrap": [
+      -0.135,
+      0.7170000000000001
+    ],
+    "mean_sustained_standard": 7.09,
+    "mean_sustained_extension": 7.35,
+    "tasks_extension_shorter": 2,
+    "tasks_extension_longer": 7,
+    "tasks_equal": 91,
+    "tasks_pass1_both": 77,
+    "survive10_standard_among_pass1_both": 70,
+    "survive10_extension_among_pass1_both": 72,
+    "cycle1_identical_code": 100,
+    "cycle1_pass_agreement": 100,
+    "broken_by_extension": [
+      "Mbpp/63",
+      "Mbpp/129"
+    ],
+    "rescued_by_extension": [
+      "Mbpp/162",
+      "Mbpp/280",
+      "Mbpp/308",
+      "Mbpp/612"
+    ]
+  }
+]

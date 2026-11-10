@@ -64,11 +64,13 @@ def target_script_share(text: str, lang: str) -> float:
     return hits / len(letters)
 
 
-def run_metrics(entry: Dict[str, Any]) -> Dict[str, Any]:
+def run_metrics(entry: Dict[str, Any], subset=None) -> Dict[str, Any]:
     run = load_run(entry["results"])
     cfg = run.get("config", {})
     max_cycles = run.get("max_cycles", 10)
     results = run["prompt_results"]
+    if subset is not None:
+        results = [r for r in results if r["task_id"] in subset]
     sustained = [r["successful_cycles"] for r in results]
     lang = cfg.get("summary_language") if run.get("loop") == "crosslingual" else None
 
@@ -107,6 +109,7 @@ def run_metrics(entry: Dict[str, Any]) -> Dict[str, Any]:
         "model": entry["model"],
         "configuration": entry["configuration"],
         "loop": run.get("loop", "standard"),
+        "prompt_set": cfg.get("prompt_set"),
         "summary_language": lang,
         "n_tasks": len(results),
         "max_cycles": max_cycles,
@@ -151,6 +154,7 @@ def paired(std: Dict[str, Any], ext: Dict[str, Any]) -> Dict[str, Any]:
     same_code1 = sum(1 for t in tasks if std["cycle1_code_by_task"][t] == ext["cycle1_code_by_task"][t])
     return {
         "model": std["model"],
+        "baseline": std["configuration"],
         "extension": ext["configuration"],
         "n_tasks": len(tasks),
         "asl_pow_standard": asl_pow(a, m),
@@ -176,12 +180,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--subset", help="task-id file; restrict every run to these tasks")
     args = parser.parse_args()
 
     entries = json.loads(Path(args.runs).read_text(encoding="utf-8"))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    metrics = [run_metrics(e) for e in entries]
+    subset = None
+    if args.subset:
+        subset = {line.split("#")[0].strip() for line in Path(args.subset).read_text().splitlines()}
+        subset.discard("")
+    metrics = [run_metrics(e, subset) for e in entries]
 
     with open(out / "summary.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -197,7 +206,8 @@ def main() -> None:
     pairs = []
     for m in metrics:
         if m["loop"] != "standard":
-            std = next((s for s in metrics if s["model"] == m["model"] and s["loop"] == "standard"), None)
+            std = next((s for s in metrics if s["model"] == m["model"] and s["loop"] == "standard"
+                        and s["prompt_set"] == m["prompt_set"]), None)
             if std:
                 pairs.append(paired(std, m))
     (out / "paired.json").write_text(json.dumps(pairs, indent=2), encoding="utf-8")
