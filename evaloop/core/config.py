@@ -5,6 +5,45 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
+# Loop types selectable with --loop. Each maps to the task_type understood by get_task_configs.
+LOOP_TASK_TYPES = {
+    "standard": "code_generation_summarization",
+    "crosslingual": "code_generation_crosslingual_summarization",
+}
+
+# Prompt templates. "repo" are the defaults shipped in this repository; "data_package" are the
+# exact templates documented for the published per-cycle data (assignment data package,
+# prompts/task_prompts.md). The two differ (one-sentence vs. detailed summaries), so runs that
+# are compared against the data package must use "data_package".
+PROMPT_SETS = {
+    "repo": {
+        "generation": "Generate Python code for the following task: \n{description}\n"
+                      "Return only the code, without explanations or comments.",
+        "summarization": "Use one sentence to summarize the following code and start with "
+                         "'write a python function to':\n\n```\n{code}\n```\n\n"
+                         "```\nwrite a python function to\n```",
+    },
+    "data_package": {
+        "generation": "Generate Python code for the following task:\n\n{description}\n\n"
+                      "Return only the code, without explanations or comments.",
+        "summarization": "Summarize what the following code does in a detailed description:\n\n"
+                         "```\n{code}\n```\n\n"
+                         "Return only the summary, without explanations or comments.",
+        # Identical to "summarization" except for the target-language clause.
+        "crosslingual_summarization":
+            "Summarize what the following code does in a detailed description, "
+            "written entirely in {language}:\n\n"
+            "```\n{code}\n```\n\n"
+            "Return only the summary in {language}, without explanations or comments.",
+    },
+}
+# Identical to the repo's standard summarization prompt except for "written in {language}" and the
+# translated forced opening ({prefix}, see crosslingual_summarization.SUMMARY_PREFIXES).
+PROMPT_SETS["repo"]["crosslingual_summarization"] = (
+    "Use one sentence written in {language} to summarize the following code and start with "
+    "'{prefix}':\n\n```\n{code}\n```\n\n```\n{prefix}\n```"
+)
+
 
 @dataclass
 class EvaluationConfig:
@@ -50,7 +89,20 @@ class EvaluationConfig:
     
     # API configuration
     openai_api_key: Optional[str] = None
-    
+
+    # Loop configuration (cross-lingual extension)
+    loop: str = "standard"               # "standard" | "crosslingual"
+    summary_language: str = "zh"         # language code or name for the crosslingual loop
+    prompt_set: str = "repo"             # "repo" | "data_package" (see PROMPT_SETS)
+    task_ids_file: Optional[str] = None  # optional file with one task id per line (subset)
+
+    # Vertex AI configuration (models given as "vertex/<publisher>/<model>")
+    vertex_project: Optional[str] = None
+    vertex_location: str = "global"
+    concurrency: int = 8
+    extra_body: Optional[Dict[str, Any]] = None
+    reasoning_effort: Optional[str] = None  # reasoning models only: "low" | "medium" | "high"
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         if not self.model:
@@ -73,7 +125,13 @@ class EvaluationConfig:
         
         if self.max_model_len <= 0:
             raise ValueError("max_model_len must be positive")
-        
+
+        if self.loop not in LOOP_TASK_TYPES:
+            raise ValueError(f"loop must be one of {sorted(LOOP_TASK_TYPES)}, got '{self.loop}'")
+
+        if self.prompt_set not in PROMPT_SETS:
+            raise ValueError(f"prompt_set must be one of {sorted(PROMPT_SETS)}, got '{self.prompt_set}'")
+
         # Create output directory
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
         
@@ -120,14 +178,40 @@ class EvaluationConfig:
             "gpu_memory_utilization": self.gpu_memory_utilization,
             "max_model_len": self.max_model_len,
             "trust_remote_code": self.trust_remote_code,
+            "max_new_tokens": self.max_new_tokens,
+            "loop": self.loop,
+            "summary_language": self.summary_language if self.loop == "crosslingual" else None,
+            "prompt_set": self.prompt_set,
+            "task_ids_file": self.task_ids_file,
+            "vertex_location": self.vertex_location,
+            "extra_body": self.extra_body,
+            "reasoning_effort": self.reasoning_effort,
         }
-    
+
     def get_model_config(self) -> Dict[str, Any]:
         """Generate model configuration for the single model."""
         return self._create_model_config(self.model)
     
     def _create_model_config(self, model: str) -> Dict[str, Any]:
         """Create configuration for a specific model."""
+        # Explicit Vertex AI prefix wins (model ids such as "vertex/openai/gpt-oss-120b-maas"
+        # would otherwise be routed to the OpenAI backend by the substring checks below)
+        if model.lower().startswith("vertex/"):
+            return {
+                "name": self._sanitize_model_name(model),
+                "type": "vertex",
+                "model_id": model[len("vertex/"):],
+                "project": self.vertex_project or os.environ.get("GOOGLE_CLOUD_PROJECT"),
+                "location": self.vertex_location,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "max_tokens": self.max_new_tokens,
+                "concurrency": self.concurrency,
+                "extra_body": self.extra_body,
+                "reasoning_effort": self.reasoning_effort,
+                "call_log_path": str(Path(self.output_dir) / f"{self.experiment_name}_calls.jsonl"),
+            }
+
         # Determine model type based on model name/path
         if any(provider in model.lower() for provider in ["gpt", "chatgpt", "openai"]):
             model_type = "openai"
@@ -402,22 +486,41 @@ class EvaluationConfig:
         # This method is now replaced by _is_vllm_supported but kept for backward compatibility
         return self._is_vllm_supported(model)
     
+    def get_loop_task_type(self) -> str:
+        """Task-sequence name of the loop selected with ``loop``."""
+        return LOOP_TASK_TYPES[self.loop]
+
     def get_task_configs(self, task_type: str = "code_generation_summarization") -> List[Dict[str, Any]]:
         """Generate task configurations based on task type."""
+        prompts = PROMPT_SETS[self.prompt_set]
+        generation = {
+            "type": "code_generation",
+            "language": "python",
+            "prompt_template": prompts["generation"],
+        }
         if task_type == "code_generation_summarization":
             return [
+                generation,
                 {
-                    "type": "code_generation",
-                    "language": "python",
-                    "prompt_template": "Generate Python code for the following task: \n{description}\nReturn only the code, without explanations or comments.",
+                    "type": "code_summarization",
+                    "prompt_template": prompts["summarization"],
                 },
+            ]
+        elif task_type == "code_generation_crosslingual_summarization":
+            # Same generation step; only the summary language changes.
+            return [
+                generation,
                 {
-                    "type": "code_summarization", 
-                    "prompt_template": "Use one sentence to summarize the following code and start with 'write a python function to':\n\n```\n{code}\n```\n\n```\nwrite a python function to\n```",
+                    "type": "crosslingual_summarization",
+                    "language": self.summary_language,
+                    "prompt_template": prompts["crosslingual_summarization"],
                 },
             ]
         elif task_type == "code_translation":
             # Code translation is not currently supported but kept as interface
             raise NotImplementedError("Code translation is not currently supported")
         else:
-            raise ValueError(f"Unsupported task type: {task_type}. Currently only 'code_generation_summarization' is supported.")
+            raise ValueError(
+                f"Unsupported task type: {task_type}. Supported: "
+                f"{sorted(LOOP_TASK_TYPES.values())}."
+            )

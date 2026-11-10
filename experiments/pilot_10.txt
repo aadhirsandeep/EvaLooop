@@ -1,0 +1,11 @@
+# 10 of 378 MBPP+ tasks, random.Random(1).sample
+Mbpp/75
+Mbpp/108
+Mbpp/123
+Mbpp/268
+Mbpp/430
+Mbpp/479
+Mbpp/565
+Mbpp/581
+Mbpp/629
+Mbpp/755

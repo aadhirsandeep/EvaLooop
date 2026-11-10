@@ -92,6 +92,15 @@ class EvaLoopCLI:
         preferred_batch_size: int = 64,
         is_chat_model: bool = True,
         system_prompt: str = "You are a helpful programming assistant.",
+        loop: str = "standard",
+        summary_language: str = "zh",
+        prompt_set: str = "repo",
+        task_ids_file: Optional[str] = None,
+        vertex_project: Optional[str] = None,
+        vertex_location: str = "global",
+        concurrency: int = 8,
+        extra_body: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Run code generation and summarization evaluation experiment.
@@ -128,6 +137,17 @@ class EvaLoopCLI:
             preferred_batch_size: Preferred batch size when auto-batching.
             is_chat_model: Whether the model is a chat/instruction-tuned model.
             system_prompt: System prompt for chat models.
+            loop: Loop type: "standard" (code <-> English summary) or "crosslingual"
+                  (code <-> summary written in --summary_language).
+            summary_language: Language code or name for the crosslingual loop (e.g. "zh", "hi").
+            prompt_set: Prompt templates: "repo" (repository defaults) or "data_package"
+                  (the templates documented for the published per-cycle data).
+            task_ids_file: Optional file with one task id per line to run a subset.
+            vertex_project: GCP project for "vertex/..." models (or GOOGLE_CLOUD_PROJECT).
+            vertex_location: Vertex AI location (default "global").
+            concurrency: Concurrent requests for API models that support batching.
+            extra_body: Optional JSON object merged into each Vertex AI request body.
+            reasoning_effort: Reasoning effort for reasoning models ("low", "medium", "high").
 
         Returns:
             Dictionary containing evaluation results with successful cycles for each task.
@@ -203,6 +223,15 @@ class EvaLoopCLI:
             is_chat_model=is_chat_model,
             system_prompt=system_prompt,
             openai_api_key=openai_api_key,
+            loop=loop,
+            summary_language=str(summary_language),
+            prompt_set=prompt_set,
+            task_ids_file=task_ids_file,
+            vertex_project=vertex_project,
+            vertex_location=vertex_location,
+            concurrency=concurrency,
+            extra_body=_parse_json_arg(extra_body),
+            reasoning_effort=reasoning_effort,
         )
         # Log model type detection results
         model_config = config.get_model_config()
@@ -214,7 +243,7 @@ class EvaLoopCLI:
                            f"batch_size={model_config['batch_config']['preferred_batch_size']}")
         elif model_type == "huggingface":
             self.logger.info(f"  HuggingFace config: device={model_config['device']}")
-        elif model_type in ["openai", "anthropic"]:
+        elif model_type in ["openai", "anthropic", "vertex"]:
             self.logger.info(f"  API config: model_id={model_config['model_id']}")
 
         # Create and run evaluator
@@ -390,6 +419,17 @@ def _split_list_arg(value: Union[str, Sequence[str]]) -> List[str]:
     """Normalize a comma-separated CLI argument that Fire may have parsed into a tuple."""
     items = value.split(",") if isinstance(value, str) else [str(item) for item in value]
     return [item.strip() for item in items if item.strip()]
+
+
+def _parse_json_arg(value: Union[None, str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Accept a JSON object given as a string (or already parsed by Fire)."""
+    if value is None or isinstance(value, dict):
+        return value
+    import json
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError("extra_body must be a JSON object")
+    return parsed
 
 
 def _resolve_api_key(api_key: Optional[str], api_key_file: Optional[str]) -> Optional[str]:

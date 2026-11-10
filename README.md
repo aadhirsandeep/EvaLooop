@@ -85,6 +85,67 @@ This is intentional, not an artifact: keeping one assert anchors the function na
 
 Want to add your own loop? A new task type is one new file plus a registry entry — no changes to the loop runner. See the [Contributing Guide](CONTRIBUTING.md).
 
+## 🌐 Extension: cross-lingual loop (fork)
+
+This fork adds a second loop type, **code ↔ non-English summary**. It keeps the standard loop's
+shape, but the summarization step writes the description in another natural language (default
+Simplified Chinese), and the next cycle generates code from that description:
+
+```
+cycle 1: original MBPP+ prompt (English) ─► code₁ ─► summary₁ in language L
+cycle k: summary_{k-1} (L) + retained assert line ─► code_k ─► summary_k (L)
+stop:    code_k fails the EvalPlus base or plus tests, or k = max_cycles
+```
+
+* **Only the model's own output perturbs the loop.** No translator is involved; the model writes
+  and reads the language-L description itself.
+* **One variable changes.** The code-generation instruction stays in English and is identical to
+  the standard loop. The summary prompt differs from the standard one only by the target
+  language (and, for the one-sentence prompt, a translated version of the forced opening
+  "write a python function to").
+* **Signature stability** works as in the standard loop: the summary is wrapped as a docstring and
+  the cycle's final `assert` line is re-attached (`CodeSummarizationTask.postprocess`, inherited
+  unchanged). The assert line is code, so it is language-neutral.
+* **Failure condition** is unchanged. Whether the model actually wrote in language L is measured
+  afterwards (`scripts/analyze_runs.py`), not enforced.
+
+```bash
+# standard loop (baseline) and cross-lingual loop for one model, inside the Docker sandbox
+docker build -t evaloop-sandbox -f docker/Dockerfile docker
+gcloud auth application-default login            # Vertex AI uses Google ADC, not API keys
+export GOOGLE_CLOUD_PROJECT=<your-project>
+./scripts/sandbox.sh python -m evaloop evaluate --model vertex/google/gemini-3.1-flash-lite \
+    --loop standard --prompt_set repo --output_dir results/main --experiment_name flashlite_standard
+./scripts/sandbox.sh python -m evaloop evaluate --model vertex/google/gemini-3.1-flash-lite \
+    --loop crosslingual --summary_language zh --prompt_set repo \
+    --output_dir results/main --experiment_name flashlite_zh
+# or every configuration of the study at once (dataset loaded once, runs in parallel):
+./scripts/sandbox.sh python scripts/run_matrix.py experiments/matrix_main.json
+```
+
+### What changed in the existing framework, and why
+
+| File | Change | Why |
+|---|---|---|
+| `evaloop/tasks/crosslingual_summarization.py` | **new** task `crosslingual_summarization` (subclass of `CodeSummarizationTask`) | the new loop step; reuses the assert-line postprocess |
+| `evaloop/models/vertex_ai.py` | **new** Vertex AI backend (OpenAI-compatible endpoint, Google ADC auth, token refresh, concurrent `batch_generate`, JSONL call log, `reasoning_effort`) | course credits are on Vertex AI, which rejects API keys; the runner already batches any model with `batch_generate`; the call log separates API errors / truncation from model failures |
+| `evaloop/tasks/__init__.py` | one import line | registers the task (as documented in CONTRIBUTING) |
+| `evaloop/core/config.py` | `loop`, `summary_language`, `prompt_set`, `task_ids_file`, Vertex fields; `vertex/` model prefix; task sequence for the new loop; `PROMPT_SETS` | the one documented place a new loop touches existing code; `prompt_set` exposes the two prompt families (see below) |
+| `evaloop/core/evaluator.py` | `run_loop()` picks the task sequence from `config.loop`; optional task subset; run config saved into the results; dataset loaded once per process; results written as UTF-8 | previously hard-wired to the standard loop; the ~1.8 GB ground truth was loaded twice per run (out-of-memory with parallel runs) |
+| `evaloop/models/factory.py` | `vertex` type; backends imported lazily | API-only runs no longer need torch/vLLM installed |
+| `evaloop/cli.py` | flags for the fields above | CLI access |
+| `docker/`, `scripts/`, `tests/test_crosslingual.py` | sandbox image, run/analysis scripts, 17 unit tests | reproducibility and safety |
+
+**Prompt families.** The repository's default summary prompt asks for *one sentence starting
+"write a python function to"* (`--prompt_set repo`). The assignment data package documents a
+*detailed description* prompt (`--prompt_set data_package`), but 45 of its 60 models' summaries
+actually follow the one-sentence style, so the published numbers come mostly from the repo
+prompt. The main experiment uses `repo`; `data_package` is kept as a sensitivity check.
+
+**Safety.** Generated code only runs inside the `evaloop-sandbox` container: only the repository
+and the read-only credentials file are mounted, the container runs as an unprivileged user with
+memory, CPU and process limits, and EvalPlus adds per-test time limits and `reliability_guard()`.
+
 ## 🛠️ CLI Reference
 
 ### `evaluate` — Code Generation ↔ Summarization

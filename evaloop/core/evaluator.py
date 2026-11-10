@@ -12,6 +12,21 @@ from ..evaluation.cycle import BatchEvaluationCycle
 from ..evaluation.py_testing import EvalPlusCodeTester, load_mbpp_dataset
 
 
+_DATASET_CACHE = None
+
+
+def _cached_mbpp_dataset():
+    """Load MBPP+ problems and ground truth once per process.
+
+    The ground-truth pickle is ~800 MB on disk and ~1.8 GB in memory; the original code loaded it
+    twice per run (dataset + tester), which exhausted memory when several runs shared a machine.
+    """
+    global _DATASET_CACHE
+    if _DATASET_CACHE is None:
+        _DATASET_CACHE = load_mbpp_dataset()
+    return _DATASET_CACHE
+
+
 class EvaLoopEvaluator:
     """Main evaluator class for running EvaLoop experiments."""
     
@@ -36,24 +51,34 @@ class EvaLoopEvaluator:
     
     def run_code_generation_summarization(self) -> List[Dict[str, Any]]:
         """
-        Run code generation and summarization evaluation.
-        
+        Run the loop selected by ``config.loop`` (default: standard generation <-> summarization).
+
+        Kept under its original name for backward compatibility; see :meth:`run_loop`.
+
         Returns:
             List of evaluation results (single model result in list for consistency).
         """
-        self.logger.info("Starting code generation and summarization evaluation")
-        
+        return self.run_loop()
+
+    def run_loop(self) -> List[Dict[str, Any]]:
+        """Run the configured loop (``standard`` or ``crosslingual``) and save the results."""
+        loop_task_type = self.config.get_loop_task_type()
+        self.logger.info(f"Starting evaluation for loop '{self.config.loop}' ({loop_task_type})")
+
         # Setup components
         model = self._create_model()
-        tasks = self._create_tasks()
+        tasks = self._create_tasks(loop_task_type)
         prompts, py_problems = self._load_dataset()
         tester = self._create_tester(py_problems)
-        
+
         # Run evaluation
         model_result = self._run_evaluation_cycles(model, tasks, prompts, py_problems, tester)
-        
+        model_result["loop"] = self.config.loop
+        model_result["config"] = self.config.to_dict()
+        model_result["prompt_templates"] = [task.task_config.get("prompt_template") for task in tasks]
+
         # Save and return results
-        self._save_results([model_result], "code_generation_summarization")
+        self._save_results([model_result], loop_task_type)
         return [model_result]
     
     def run_code_translation(self) -> Dict[str, Any]:
@@ -75,18 +100,29 @@ class EvaLoopEvaluator:
         self.logger.info(f"Created model for evaluation: {model}")
         return model
     
-    def _create_tasks(self):
+    def _create_tasks(self, task_type: str = "code_generation_summarization"):
         """Create task instances."""
-        task_configs = self.config.get_task_configs("code_generation_summarization")
+        task_configs = self.config.get_task_configs(task_type)
         tasks = [self.task_factory.create_task(config) for config in task_configs]
         self.logger.info(f"Created {len(tasks)} tasks for evaluation")
         return tasks
     
     def _load_dataset(self):
         """Load and prepare the dataset."""
-        py_problems, ground_truth = load_mbpp_dataset()
+        py_problems, ground_truth = _cached_mbpp_dataset()
         self.logger.info(f"Loaded MBPP dataset with {len(py_problems)} problems")
         
+        # Optional task subset (one task id per line, '#' comments allowed)
+        if self.config.task_ids_file:
+            wanted = [line.split("#")[0].strip()
+                      for line in Path(self.config.task_ids_file).read_text().splitlines()]
+            wanted = [task_id for task_id in wanted if task_id]
+            missing = [task_id for task_id in wanted if task_id not in py_problems]
+            if missing:
+                raise ValueError(f"Unknown task ids in {self.config.task_ids_file}: {missing[:5]}")
+            py_problems = {task_id: py_problems[task_id] for task_id in wanted}
+            self.logger.info(f"Restricted to {len(py_problems)} tasks from {self.config.task_ids_file}")
+
         # Prepare prompts from dataset
         prompts = []
         for task_id, problem in py_problems.items():
@@ -100,7 +136,7 @@ class EvaLoopEvaluator:
     
     def _create_tester(self, py_problems):
         """Create the code tester."""
-        _, ground_truth = load_mbpp_dataset()  # Get ground truth
+        _, ground_truth = _cached_mbpp_dataset()  # Get ground truth (loaded once per process)
         return EvalPlusCodeTester(py_problems, ground_truth)
     
     def _run_evaluation_cycles(self, model, tasks, prompts, py_problems, tester) -> Dict[str, Any]:
@@ -260,8 +296,8 @@ class EvaLoopEvaluator:
         """Save evaluation results to file."""
         output_file = Path(self.config.output_dir) / f"{self.config.experiment_name}_{experiment_type}_results.json"
         
-        with open(output_file, "w") as f:
-            json.dump(results, f, indent=2)
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
         
         self.logger.info(f"Results saved to {output_file}")
     

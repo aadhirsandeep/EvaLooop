@@ -97,3 +97,11 @@ package.json
 
 # Results
 results/*
+# API keys
+api.key
+*.key
+
+# Local caches / sandbox state
+.cache/
+# Data-package excerpts must not be redistributed
+experiments/inspection/package_*
