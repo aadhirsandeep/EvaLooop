@@ -134,7 +134,7 @@ export GOOGLE_CLOUD_PROJECT=<your-project>
 | `evaloop/core/evaluator.py` | `run_loop()` picks the task sequence from `config.loop`; optional task subset; run config saved into the results; dataset loaded once per process; results written as UTF-8 | previously hard-wired to the standard loop; the ~1.8 GB ground truth was loaded twice per run (out-of-memory with parallel runs) |
 | `evaloop/models/factory.py` | `vertex` type; backends imported lazily | API-only runs no longer need torch/vLLM installed |
 | `evaloop/cli.py` | flags for the fields above | CLI access |
-| `docker/`, `scripts/`, `tests/test_crosslingual.py` | sandbox image, run/analysis scripts, 17 unit tests | reproducibility and safety |
+| `docker/`, `scripts/`, `tests/test_crosslingual.py` | sandbox image, run/analysis scripts, 19 unit tests | reproducibility and safety |
 
 **Prompt families.** The repository's default summary prompt asks for *one sentence starting
 "write a python function to"* (`--prompt_set repo`). The assignment data package documents a
